@@ -69,10 +69,11 @@ class _FCNHead(nn.Module):
 
 
 class tfdblock(nn.Module):
+    """Taylor infnite different"""
     def __init__(self, inch, outch):
         super(tfdblock, self).__init__()
-        self.res1 = Resnet.BasicBlock1(inch, outch, stride=1, downsample=None)   # cdc conv
-        self.res2 = Resnet.BasicBlock1(inch, outch, stride=1, downsample=None)   # cdc conv
+        self.res1 = Resnet.BasicBlock1(inch, outch, stride=1, downsample=None)
+        self.res2 = Resnet.BasicBlock1(inch, outch, stride=1, downsample=None)
         self.gate = gsc.GatedSpatialConv2d(inch, outch)
 
     def forward(self,x,f_x):
@@ -184,6 +185,7 @@ class detlnet(nn.Module):
         self.head2 = _FCNHead(channels[1], 3)
         self.conv2_1 = nn.Conv2d(3, 1, 1)
         self.conv16 = nn.Conv2d(3, 16, 1)
+
         self.myb1 = tfdblock(64,64)
         self.myb2 = tfdblock(64,64)
         self.myb3 = tfdblock(64,64)

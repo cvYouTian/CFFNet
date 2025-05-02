@@ -47,18 +47,8 @@ class GatedSpatialConv2d(_ConvNd):
         )
 
     def forward(self, input_features, gating_features):
-        """
-
-        :param input_features:  [NxCxHxW]  featuers comming from the shape branch (canny branch).
-        从形状分支（canny 分支）传来的特征。
-        :param gating_features: [Nx1xHxW] features comming from the texture branch (resnet). Only one channel feature map.
-        从纹理分支（resnet）传来的特征。只有一个通道的特征图。
-        :return:
-        input_features是边缘 gating_features是主分支目标特征
-        """
 
         alphas = self._gate_conv(torch.cat([input_features, gating_features], dim=1))
-        # 计算门控权重
 
         input_features = (input_features * (alphas + 1)) 
         return F.conv2d(input_features, self.weight, self.bias, self.stride,

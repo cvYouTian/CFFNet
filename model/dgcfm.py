@@ -211,6 +211,9 @@ class Focus(nn.Module):
 
 
 class CDC_conv(nn.Module):
+    """
+    中心差分卷
+    """
     def __init__(self, in_channels, out_channels, bias=True, kernel_size=3, stride=1,
                 padding=1, dilation=1, theta=0.7, padding_mode='zeros'):
         super().__init__()
@@ -298,12 +301,39 @@ class MCFM(nn.Module):
         return out
 
 
+# class MCBlock(nn.Module):
+#
+#     def __init__(self, in_channels, out_channels,mlp_ratio=4., drop=0., drop_path=0., norm_layer=GroupNorm):
+#         super().__init__()
+#         # 64
+#         self.MCFM = MCFM(in_channels, out_channels)
+#
+#         self.linear = nn.Linear(out_channels, out_channels)  # learnable position embedding
+#         self.out_channels = out_channels
+#
+#         self.norm1 = norm_layer(in_channels)
+#         self.norm2 = norm_layer(in_channels)
+#
+#         mlp_hidden_dim = int(in_channels * mlp_ratio)
+#         self.Mlp = Mlp(in_features=in_channels, hidden_features=mlp_hidden_dim, act_layer=nn.GELU,
+#                        drop=drop)
+#
+#         self.drop_path = DropPath(drop_path) if drop_path > 0. \
+#             else nn.Identity()
+#
+#     def forward(self, x):
+#         # mcfm
+#         x = x + self.drop_path(self.MCFM(self.norm1(x)))
+#         # mlp
+#         x = x + self.drop_path(self.Mlp(self.norm2(x)))
+        return x
+
 class MCBlock(nn.Module):
+    """
+    vit
+    """
     def __init__(self, in_channels, out_channels,mlp_ratio=4., drop=0., drop_path=0., norm_layer=GroupNorm):
         super().__init__()
-        # 64
-        self.MCFM = MCFM(in_channels, out_channels)
-
         self.linear = nn.Linear(out_channels, out_channels)  # learnable position embedding
         self.out_channels = out_channels
 
@@ -318,19 +348,37 @@ class MCBlock(nn.Module):
             else nn.Identity()
 
     def forward(self, x):
-        # mcfm
-        x = x + self.drop_path(self.MCFM(self.norm1(x)))
+        x = x + self.drop_path(self.norm1(x))
         # mlp
         x = x + self.drop_path(self.Mlp(self.norm2(x)))
         return x
 
+# class dgcfm(nn.Module):
+#     def __init__(self, in_channels, out_channels):
+#         super().__init__()
+#
+#         self.CDC1 = CDC_conv(in_channels, out_channels, kernel_size=7, padding=3, theta=0.7, padding_mode='zeros',
+#                              stride=1, bias=False)
+#         self.bn1 = nn.BatchNorm2d(in_channels)
+#         self.act1 = nn.ReLU(inplace=True)
+#         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+#
+#         self.MCB = MCBlock(in_channels, out_channels, mlp_ratio=4., drop=0., drop_path=0., norm_layer=GroupNorm)
+#
+#     def forward(self, x):
+#         x1 = self.maxpool(self.act1(self.bn1(self.CDC1(x))))
+#         x_mcb = self.MCB(x1)
+#         return x_mcb
 
 class dgcfm(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
 
-        self.CDC1 = CDC_conv(in_channels, out_channels, kernel_size=7, padding=3, theta=0.7, padding_mode='zeros',
-                             stride=1, bias=False)
+        # self.CDC1 = CDC_conv(in_channels, out_channels, kernel_size=7, padding=3, theta=0.7, padding_mode='zeros',
+        #                      stride=1, bias=False)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=7, padding=3, padding_mode="zeros", stride=1,
+                              bias=False)
+
         self.bn1 = nn.BatchNorm2d(in_channels)
         self.act1 = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
@@ -338,6 +386,19 @@ class dgcfm(nn.Module):
         self.MCB = MCBlock(in_channels, out_channels, mlp_ratio=4., drop=0., drop_path=0., norm_layer=GroupNorm)
 
     def forward(self, x):
-        x1 = self.maxpool(self.act1(self.bn1(self.CDC1(x))))
-        x_mcb = self.MCB(x1)
+        x = self.conv(x)
+        x = self.maxpool(self.act1(self.bn1(x)))
+        x_mcb = self.MCB(x)
         return x_mcb
+
+if __name__ == '__main__':
+
+    feture_test1 = torch.rand(1, 64, 120, 120)*255
+    feture_test1 = feture_test1.to(torch.float32)
+
+    # feture_test2 = torch.rand(1, 64, 120, 120)*255
+    # feture_test2 = feture_test2.to(torch.float32)
+
+    c1 = dgcfm2(64, 64)
+    f1 = c1(feture_test1)
+    print(f1.shape)

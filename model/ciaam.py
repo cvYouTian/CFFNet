@@ -82,11 +82,38 @@ class PixelAttention(nn.Module):
         B, C, H, W = x.shape
         x = x.unsqueeze(dim=2)  # B, C, 1, H, W
         pattn1 = pattn1.unsqueeze(dim=2)  # B, C, 1, H, W
+        # cat
         x2 = torch.cat([x, pattn1], dim=2)  # B, C, 2, H, W
         x2 = Rearrange('b c t h w -> b (c t) h w')(x2)
+        # 77Dconv
         pattn2 = self.pa2(x2)
+        # Sn
         pattn2 = self.sigmoid(pattn2)
         return pattn2
+
+
+# class CIAAModule(nn.Module):
+#     def __init__(self, dim, reduction=8):
+#         super(CIAAModule, self).__init__()
+#         self.sa = SpatialAttention()
+#         self.ca = ChannelAttention(dim, reduction)
+#         self.pa = PixelAttention(dim)
+#         self.conv = nn.Conv2d(dim, dim, 1, bias=True)
+#         self.sigmoid = nn.Sigmoid()
+#         self.CLH = CLH(dim)
+#
+#     def forward(self, x, y):
+#         initial = x + y
+#         cattn = self.ca(initial)
+#         sattn = self.sa(initial)
+#         pattn1 = sattn + cattn
+#         pattn2 = self.sigmoid(self.pa(initial, pattn1))
+#         low2_sigmoid = self.CLH(x)
+#         low2 = y * low2_sigmoid
+#         result = initial + pattn2 * x + (1 - pattn2) * y + low2
+#         result = self.conv(result)
+#         return result
+
 
 
 class CIAAModule(nn.Module):
@@ -97,17 +124,32 @@ class CIAAModule(nn.Module):
         self.pa = PixelAttention(dim)
         self.conv = nn.Conv2d(dim, dim, 1, bias=True)
         self.sigmoid = nn.Sigmoid()
-        self.CLH = CLH(dim)
+        # self.CLH = CLH(dim)
 
     def forward(self, x, y):
+        #cn
         initial = x + y
+
         cattn = self.ca(initial)
         sattn = self.sa(initial)
+
         pattn1 = sattn + cattn
+        # sigmoid（sn）
         pattn2 = self.sigmoid(self.pa(initial, pattn1))
-        low2_sigmoid = self.CLH(x)
-        low2 = y * low2_sigmoid
-        result = initial + pattn2 * x + (1 - pattn2) * y + low2
+        # 下面那个分支
+        # low2_sigmoid = self.CLH(x)
+        # low2 = y * low2_sigmoid
+        result = initial + pattn2 * x + (1 - pattn2) * y
         result = self.conv(result)
         return result
 
+if __name__ == '__main__':
+
+    feture_test1 = torch.rand(1, 64, 120, 120)*255
+    feture_test1 = feture_test1.to(torch.float32)
+    feture_test2 = torch.rand(1, 64, 120, 120)*255
+    feture_test2 = feture_test2.to(torch.float32)
+
+    c1 = CIAAModule(64)
+    f1 = c1(feture_test1, feture_test2)
+    print(f1.shape)
