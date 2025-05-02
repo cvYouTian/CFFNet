@@ -134,9 +134,9 @@ class detlnet(nn.Module):
             nn.MaxPool2d(3, 2, 1),
         )
         # 32
-        self.ciaam_low = CIAAModule(channels[2])
+        self.ciaam_low = CSAModule(channels[2])
         # 16
-        self.ciaam_high = CIAAModule(channels[1])
+        self.ciaam_high = CSAModule(channels[1])
 
         self.layer1 = self._make_layer(block=ResidualBlock, block_num=layer_blocks[0],
                                        in_channels=channels[1], out_channels=channels[1], stride=1)
