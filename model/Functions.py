@@ -1,24 +1,14 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
-from torch.autograd import Function, Variable
-from torch.nn import Module, parameter
-
-
-import warnings
 try:
     from queue import Queue
 except ImportError:
     from Queue import Queue
 
-from torch.nn.modules.batchnorm import _BatchNorm
 from functools import partial
 
 
 from timm.models.layers import DropPath, trunc_normal_
-from timm.models.registry import register_model
-from timm.layers.helpers import to_2tuple
-from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 class ConvBlock(nn.Module):

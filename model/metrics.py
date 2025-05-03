@@ -1,13 +1,5 @@
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
-
 import numpy as np
-import threading
-import numpy as np
-# import mxnet as mx
-# from mxnet import nd
-# from mxnet.metric import EvalMetric
 
 
 class SigmoidMetric():

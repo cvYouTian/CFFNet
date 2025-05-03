@@ -1,11 +1,9 @@
-import  numpy as np
-import torch.nn as nn
+import numpy as np
 import torch
 from skimage import measure
-import  numpy
 
 
-class ROCMetric():
+class ROCMetric:
     """Computes pixAcc and mIoU metric scores
     """
     def __init__(self, nclass, bins):
@@ -16,6 +14,7 @@ class ROCMetric():
         self.pos_arr = np.zeros(self.bins+1)
         self.fp_arr = np.zeros(self.bins+1)
         self.neg_arr = np.zeros(self.bins+1)
+
         self.class_pos=np.zeros(self.bins+1)
         # self.reset()
 
@@ -35,6 +34,7 @@ class ROCMetric():
         fp_rates    = self.fp_arr / (self.neg_arr + 0.001)
 
         recall      = self.tp_arr / (self.pos_arr   + 0.001)
+
         precision   = self.tp_arr / (self.class_pos + 0.001)
 
 

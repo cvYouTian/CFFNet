@@ -9,12 +9,9 @@ import os
 import os.path as ops
 import numpy as np
 import time
-from data.lr_scheduler import adjust_learning_rate
-
 from data.dataset_IRSTD1K import Dataset
-
-from detlnet import detlnet
-from loss import SoftLoULoss1, SoftLoULoss, FocalLoss
+from cffnet import cffnet
+from loss import SoftLoULoss1, FocalLoss
 from metrics import SigmoidMetric, SamplewiseSigmoidMetric
 from torchvision import utils as vutils
 import torch.nn.functional as F
@@ -59,9 +56,9 @@ class Trainer(object):
         layer_blocks = [args.blocks_per_layer] * 3
         channels = [8, 16, 32, 64]
         if args.backbone_mode == 'detlnet_sir':
-            self.net = detlnet(layer_blocks, channels)
+            self.net = cffnet(layer_blocks, channels)
         elif args.backbone_mode == 'detlnet_1k':
-            self.net = detlnet(layer_blocks, channels)
+            self.net = cffnet(layer_blocks, channels)
         else:
             NameError
         # device = torch.device("cuda")
@@ -78,7 +75,6 @@ class Trainer(object):
         self.criterion2 = nn.BCELoss()
         self.criterion3 = FocalLoss()
         self.bce = nn.BCELoss()
-
 
         self.optimizer = torch.optim.Adagrad(self.net.parameters(), lr=args.learning_rate, weight_decay=1e-4)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, T_max=30)
@@ -108,11 +104,11 @@ class Trainer(object):
         if not ops.exists(self.save_pkl):
             os.mkdir(self.save_pkl)
 
-        ## SummaryWriter
+        # SummaryWriter
         self.writer = SummaryWriter(log_dir=self.save_folder)
         self.writer.add_text(folder_name, 'Args:%s, ' % args)
 
-        ## Print info
+        # Print info
         print('folder: %s' % self.save_folder)
         print('Args: %s' % args)
         print('backbone: %s' % args.backbone_mode)
@@ -146,9 +142,6 @@ class Trainer(object):
             # 在net中将data和edge_in加到此cuda上
             output, edge_out = self.net(data, edge_in)
 
-            # print(f"Min labels value: {labels.min()}, Max labels value: {labels.max()}")
-            # print(f"Min edge_gt value: {edge_gt.min()}, Max edge_gt value: {edge_gt.max()}")
-
             loss_io = self.criterion1(output, labels)
             loss_edge = 10 * self.criterion2(edge_out, edge_gt) + self.criterion1(edge_out, edge_gt)
 
@@ -163,7 +156,6 @@ class Trainer(object):
             tbar.set_description('Epoch:%3d, lr:%f, train loss:%f, edge_loss:%f'
                                  % (epoch, trainer.optimizer.param_groups[0]['lr'], np.mean(losses), np.mean(losses_edge)))
 
-        # adjust_learning_rate(self.optimizer, epoch, args.epochs, args.learning_rate, args.warm_up_epochs, 1e-6)
         self.scheduler.step(epoch)
 
         self.writer.add_scalar('Losses/train loss', np.mean(losses), epoch)
@@ -300,6 +292,7 @@ class Get_gradient(nn.Module):
         return x
 
 
+
 class Get_gradient_nopadding(nn.Module):
     def __init__(self):
         super(Get_gradient_nopadding, self).__init__()
@@ -379,8 +372,5 @@ if __name__ == '__main__':
         trainer.validation(epoch)
 
     print('Best IoU: %.5f, best nIoU: %.5f' % (trainer.best_iou, trainer.best_nIoU))
-
-
-
 
 

@@ -1,25 +1,7 @@
 from my_functionals import GatedSpatialConv as gsc
 from network import Resnet
-from dgcfm import *
-from ciaam import *
-
-
-class space_to_depth(nn.Module):
-    # Changing the dimension of the Tensor
-    def __init__(self, dimension=1):
-        super().__init__()
-        self.d = dimension
-
-    def forward(self, x):
-        return torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1)
-
-
-def autopad(k, p=None):
-    # kernel, padding
-    # Pad to 'same'
-    if p is None:
-        p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
-    return p
+from cffm import *
+from csam import *
 
 
 class ResidualBlock(nn.Module):
@@ -108,10 +90,10 @@ class BasicConv(nn.Module):
         return x
 
 
-class detlnet(nn.Module):
+class cffnet(nn.Module):
     def __init__(self, layer_blocks, channels):
         # channel[8, 16, 32, 64]
-        super(detlnet, self).__init__()
+        super(cffnet, self).__init__()
         # 8
         stem_width = int(channels[0])
 
@@ -145,19 +127,19 @@ class detlnet(nn.Module):
         self.layer3 = self._make_layer(block=ResidualBlock, block_num=layer_blocks[2],
                                        in_channels=channels[2], out_channels=channels[3], stride=2)
 
-        self.dgcfm1 = dgcfm(in_channels=channels[3], out_channels=channels[3]) # 64,
+        self.cffm1 = CFFM(in_channels=channels[3], out_channels=channels[3]) # 64,
 
         self.deconv2 = nn.ConvTranspose2d(channels[3], channels[2], 4, 2, 1)
 
         self.uplayer2 = self._make_layer(block=ResidualBlock, block_num=layer_blocks[1],
                                          in_channels=channels[2], out_channels=channels[2], stride=1)
-        self.dgcfm2 = dgcfm(in_channels=channels[2], out_channels=channels[2])
+        self.cffm2 = CFFM(in_channels=channels[2], out_channels=channels[2])
 
         self.deconv1 = nn.ConvTranspose2d(channels[2], channels[1], 4, 2, 1)
 
         self.uplayer1 = self._make_layer(block=ResidualBlock, block_num=layer_blocks[0],
                                          in_channels=channels[1], out_channels=channels[1], stride=1)
-        self.dgcfm3 = dgcfm(in_channels=channels[1], out_channels=channels[1])
+        self.cffm3 = CFFM(in_channels=channels[1], out_channels=channels[1])
 
         self.head = _FCNHead(channels[1], 1)
 
@@ -205,19 +187,19 @@ class detlnet(nn.Module):
         c2 = self.layer2(c1)
         c3 = self.layer3(c2)
 
-        dgcfm1 = self.dgcfm1(c3)
+        cffm1 = self.cffm1(c3)
 
         m1f = F.interpolate(x_grad, size=[hei, wid], mode='bilinear', align_corners=True)
         m1f = self.dsup(m1f.to(device))
 
-        s1 = F.interpolate(self.dsn1(dgcfm1), size=[hei, wid], mode='bilinear', align_corners=True)
+        s1 = F.interpolate(self.dsn1(cffm1), size=[hei, wid], mode='bilinear', align_corners=True)
         cs1 = self.myb1(m1f, s1)
 
-        dgcfm1_size = dgcfm1.size()
-        cs1_1 = F.interpolate(cs1, size=dgcfm1_size[2:], mode='bilinear', align_corners=False)
+        cffm1_size = cffm1.size()
+        cs1_1 = F.interpolate(cs1, size=cffm1_size[2:], mode='bilinear', align_corners=False)
 
         cs1_1 = self.sigmoid(cs1_1)
-        et1 = cs1_1 * dgcfm1 + dgcfm1
+        et1 = cs1_1 * cffm1 + cffm1
 
         deconc2 = self.deconv2(et1)
 
@@ -225,26 +207,26 @@ class detlnet(nn.Module):
         upc2 = self.uplayer2(fusec2)
 
         upc2 = upc2 + c2
-        dgcfm2 = self.dgcfm2(upc2)
+        cffm2 = self.cffm2(upc2)
 
-        s2 = F.interpolate(self.dsn2(dgcfm2), size=[hei, wid], mode='bilinear', align_corners=True)
+        s2 = F.interpolate(self.dsn2(cffm2), size=[hei, wid], mode='bilinear', align_corners=True)
 
         cs2 = self.myb2(cs1, s2)
 
-        dgcfm2_size = dgcfm2.size()
-        cs2_2 = F.interpolate(cs2, size=dgcfm2_size[2:], mode='bilinear', align_corners=True)
+        cffm2_size = cffm2.size()
+        cs2_2 = F.interpolate(cs2, size=cffm2_size[2:], mode='bilinear', align_corners=True)
         cs2_2 = self.CDC1(cs2_2)
 
         cs2_2 = self.sigmoid(cs2_2)
-        et2 = cs2_2 * dgcfm2 + dgcfm2
+        et2 = cs2_2 * cffm2 + cffm2
 
         deconc1 = self.deconv1(et2)
         fusec1 =self.ciaam_high(deconc1, c1)
         upc1 = self.uplayer1(fusec1)
         upc1 = upc1 + c1
-        dgcfm3 = self.dgcfm3(upc1)
+        cffm3 = self.cffm3(upc1)
 
-        s3 = F.interpolate(self.dsn3(dgcfm3), size=[hei, wid], mode='bilinear', align_corners=True)
+        s3 = F.interpolate(self.dsn3(cffm3), size=[hei, wid], mode='bilinear', align_corners=True)
         cs = self.myb3(cs2, s3)
 
         cs = self.fuse(cs)
@@ -253,8 +235,8 @@ class detlnet(nn.Module):
 
         edge_out = self.sigmoid(cs)
 
-        dgcfm3 = F.interpolate(dgcfm3, size=[hei, wid], mode='bilinear')
-        fuse = edge_out * dgcfm3 + dgcfm3
+        cffm3 = F.interpolate(cffm3, size=[hei, wid], mode='bilinear')
+        fuse = edge_out * cffm3 + cffm3
 
         pred = self.head(fuse)
 
@@ -271,8 +253,7 @@ class detlnet(nn.Module):
 
 
 if __name__ == '__main__':
-    net = detlnet(layer_blocks = [4] * 3,
-        channels = [8, 16, 32, 64])
+    net = cffnet(layer_blocks=[4] * 3, channels=[8, 16, 32, 64])
     print(net)
 
 
