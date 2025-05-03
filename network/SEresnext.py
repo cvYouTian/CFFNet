@@ -1,6 +1,6 @@
 from collections import OrderedDict
 import math
-import  network.mynn as  mynn
+import network.mynn as mynn
 import torch.nn as nn
 from torch.utils import model_zoo
 

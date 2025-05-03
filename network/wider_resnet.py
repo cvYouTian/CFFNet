@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch
 import network.mynn as mynn
 
+
 def bnrelu(channels):
     return nn.Sequential(mynn.Norm2d(channels),
                          nn.ReLU(inplace=True))
