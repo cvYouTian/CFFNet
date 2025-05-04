@@ -126,8 +126,8 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-
-def evaluate_eval(args, net, optimizer, val_loss, mf_score, hist, dump_images, heatmap_images, writer, epoch=0, dataset=None, ):
+def evaluate_eval(args, net, optimizer, val_loss, mf_score, hist,
+                  dump_images, heatmap_images, writer, epoch=0, dataset=None):
     '''
     Modified IOU mechanism for on-the-fly IOU calculations ( prevents memory overflow for
     large dataset) Only applies to eval/eval.py

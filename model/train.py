@@ -20,7 +20,6 @@ from metric import PD_FA, ROCMetric, mIoU
 
 
 def parse_args():
-
     parser = ArgumentParser(description='Implement of DETL-Net model')
 
     parser.add_argument('--crop-size', type=int, default=480, help='crop image size')
@@ -46,13 +45,14 @@ class Trainer(object):
         self.args = args
         trainset = Dataset(args, mode='train')
         valset = Dataset(args, mode='val')
-        self.train_data_loader = Data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8,pin_memory=True)
-        self.val_data_loader = Data.DataLoader(valset, batch_size=4, num_workers=1, pin_memory=True)
+        self.train_data_loader = Data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=8,
+                                                 pin_memory=True)
+        self.val_data_loader = Data.DataLoader(valset, batch_size=1, num_workers=1, pin_memory=True)
 
-        print(len(self.val_data_loader))
+        print("the step of validation : ", len(self.val_data_loader))
 
         self.grad = Get_gradient_nopadding()
-        self.gradmask  = Get_gradientmask_nopadding()
+        self.gradmask = Get_gradientmask_nopadding()
 
         layer_blocks = [args.blocks_per_layer] * 3
         channels = [8, 16, 32, 64]
@@ -79,22 +79,22 @@ class Trainer(object):
 
         self.optimizer = torch.optim.Adagrad(self.net.parameters(), lr=args.learning_rate, weight_decay=1e-4)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, T_max=30)
-
+        # iou和niou的评估
         self.iou_metric = SigmoidMetric()
         self.nIoU_metric = SamplewiseSigmoidMetric(1, score_thresh=0.5)
-
+        # 初始化
         self.best_iou = 0
         self.best_nIoU = 0
         self.best_FA = 1000000000000000
         self.best_PD = 0
-
+        # ROC 曲线的评估
         self.ROC = ROCMetric(1, 10)
         self.PD_FA = PD_FA(1, 10)
         self.mIoU = mIoU(1)
 
-        ## folders
-        folder_name = '%s_%s_%s' % (time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time())),
-                                         args.backbone_mode, args.fuse_mode)
+        # folders
+        folder_name = '%s_%s_%s' % (time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time())),
+                                    args.backbone_mode, args.fuse_mode)
         self.save_folder = ops.join('result/', folder_name)
 
         self.save_pkl = ops.join(self.save_folder, 'checkpoint')
@@ -128,7 +128,8 @@ class Trainer(object):
             # data = data.cuda()
             if torch.cuda.is_available():
                 data = data.cuda()
-                labels = labels[:,0:1,:,:].cuda()
+                labels = labels[:, 0:1, :, :].cuda()
+                # 处理边缘特征和mask的边缘特征
                 edge_in = self.grad(data.cuda())
                 edge_gt = self.gradmask(edge.cuda())
             else:
@@ -136,7 +137,7 @@ class Trainer(object):
                 labels = labels[:, 0:1, :, :].cpu()
                 edge_in = self.grad(data.cpu())
                 edge_gt = self.gradmask(edge.cpu())
-
+            # 这部分使用的强制转化，训练精度有待提升
             labels = torch.clamp(labels, 0.0, 1.0)
             edge_gt = torch.clamp(edge_gt, 0.0, 1.0)
 
@@ -155,7 +156,8 @@ class Trainer(object):
             losses.append(loss.item())
 
             tbar.set_description('Epoch:%3d, lr:%f, train loss:%f, edge_loss:%f'
-                                 % (epoch, trainer.optimizer.param_groups[0]['lr'], np.mean(losses), np.mean(losses_edge)))
+                                 % (
+                                 epoch, trainer.optimizer.param_groups[0]['lr'], np.mean(losses), np.mean(losses_edge)))
 
         self.scheduler.step(epoch)
 
@@ -189,6 +191,7 @@ class Trainer(object):
                 edge_out = edge_out.cpu()
                 edge_gt = edge_gt.cpu()
 
+            # optim here ！！
             labels = torch.clamp(labels, 0.0, 1.0)
             edge_gt = torch.clamp(edge_gt, 0.0, 1.0)
 
@@ -205,14 +208,16 @@ class Trainer(object):
             self.mIoU.update(output, labels)
             self.PD_FA.update(output, labels)
             FA, PD = self.PD_FA.get(len(self.val_data_loader))
+            # print()
 
             _, mean_IOU = self.mIoU.get()
             _, IoU = self.iou_metric.get()
             _, nIoU = self.nIoU_metric.get()
 
-            tbar.set_description('  Epoch:%3d, eval loss:%f, eval_edge:%f, IoU:%f, nIoU:%f'
-                                 % (epoch, np.mean(eval_losses), np.mean(eval_losses_edge), IoU, nIoU))
-
+            tbar.set_description('  Epoch:%3d, eval loss:%f, eval_edge:%f, IoU:%f, nIoU:%f, mIoU:%f, FA:%f, PD:%f'
+                                 % (
+                                 epoch, np.mean(eval_losses), np.mean(eval_losses_edge), IoU, nIoU, mean_IOU, FA, PD))
+        # 权重命名
         pkl_name = 'Epoch-%3d_IoU-%.4f_nIoU-%.4f.pkl' % (epoch, IoU, nIoU)
 
         if IoU > self.best_iou:
@@ -221,8 +226,8 @@ class Trainer(object):
         if nIoU > self.best_nIoU:
             torch.save(self.net, ops.join(self.save_pkl, pkl_name))
             self.best_nIoU = nIoU
-        if FA[0]*1000000 > 0 and FA[0]*1000000 < self.best_FA:
-            self.best_FA = FA[0]*1000000
+        if FA[0] * 1000000 > 0 and FA[0] * 1000000 < self.best_FA:
+            self.best_FA = FA[0] * 1000000
         if PD[0] > self.best_PD:
             self.best_PD = PD[0]
 
@@ -259,6 +264,9 @@ class Trainer(object):
 
 
 class Get_gradient_nopadding(nn.Module):
+    """
+    stract edge feature
+    """
     def __init__(self):
         super(Get_gradient_nopadding, self).__init__()
         kernel_v = [[0, -1, 0],
@@ -271,26 +279,28 @@ class Get_gradient_nopadding(nn.Module):
         kernel_v = torch.FloatTensor(kernel_v).unsqueeze(0).unsqueeze(0)
         # self.weight_h = nn.Parameter(data = kernel_h, requires_grad = False).to("cpu")
         if torch.cuda.is_available():
-            self.weight_h = nn.Parameter(data = kernel_h, requires_grad = False).cuda()
+            self.weight_h = nn.Parameter(data=kernel_h, requires_grad=False).cuda()
             # self.weight_v = nn.Parameter(data = kernel_v, requires_grad = False).to("cpu")
-            self.weight_v = nn.Parameter(data = kernel_v, requires_grad = False).cuda()
+            self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False).cuda()
         else:
-            self.weight_h = nn.Parameter(data = kernel_h, requires_grad = False).cpu()
+            self.weight_h = nn.Parameter(data=kernel_h, requires_grad=False).cpu()
             # self.weight_v = nn.Parameter(data = kernel_v, requires_grad = False).to("cpu")
-            self.weight_v = nn.Parameter(data = kernel_v, requires_grad = False).cpu()
+            self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False).cpu()
 
     def forward(self, x):
-        x0 = x[:, 0]
-        x1 = x[:, 1]
-        x2 = x[:, 2]
-        x0_v = F.conv2d(x0.unsqueeze(1), self.weight_v, padding = 1)
-        x0_h = F.conv2d(x0.unsqueeze(1), self.weight_h, padding = 1)
+        x0 = x[:, 0:1]
 
-        x1_v = F.conv2d(x1.unsqueeze(1), self.weight_v, padding = 1)
-        x1_h = F.conv2d(x1.unsqueeze(1), self.weight_h, padding = 1)
+        x1 = x[:, 1:2]
+        x2 = x[:, 2:3]
 
-        x2_v = F.conv2d(x2.unsqueeze(1), self.weight_v, padding = 1)
-        x2_h = F.conv2d(x2.unsqueeze(1), self.weight_h, padding = 1)
+        x0_v = F.conv2d(x0.unsqueeze(1), self.weight_v, padding=1)
+        x0_h = F.conv2d(x0.unsqueeze(1), self.weight_h, padding=1)
+
+        x1_v = F.conv2d(x1.unsqueeze(1), self.weight_v, padding=1)
+        x1_h = F.conv2d(x1.unsqueeze(1), self.weight_h, padding=1)
+
+        x2_v = F.conv2d(x2.unsqueeze(1), self.weight_v, padding=1)
+        x2_h = F.conv2d(x2.unsqueeze(1), self.weight_h, padding=1)
 
         x0 = torch.sqrt(torch.pow(x0_v, 2) + torch.pow(x0_h, 2) + 1e-6)
         x1 = torch.sqrt(torch.pow(x1_v, 2) + torch.pow(x1_h, 2) + 1e-6)
@@ -301,6 +311,9 @@ class Get_gradient_nopadding(nn.Module):
 
 
 class Get_gradientmask_nopadding(nn.Module):
+    """
+    stract edge of mask feature
+    """
     def __init__(self):
         super(Get_gradientmask_nopadding, self).__init__()
         kernel_v = [[0, -1, 0],
@@ -319,7 +332,7 @@ class Get_gradientmask_nopadding(nn.Module):
             self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False).cpu()
 
     def forward(self, x):
-        x0 = x[:, 0]
+        x0 = x[:, 0:1]
         x0_v = F.conv2d(x0.unsqueeze(1), self.weight_v, padding=1)
         x0_h = F.conv2d(x0.unsqueeze(1), self.weight_h, padding=1)
         x0 = torch.sqrt(torch.pow(x0_v, 2) + torch.pow(x0_h, 2) + 1e-6)
@@ -330,10 +343,9 @@ class Get_gradientmask_nopadding(nn.Module):
 if __name__ == '__main__':
     args = parse_args()
     trainer = Trainer(args)
-    for epoch in range(1, args.epochs+1):
-        trainer.training(epoch)
+    for epoch in range(1, args.epochs + 1):
+        # trainer.training(epoch)
         trainer.validation(epoch)
 
-    print('Best IoU: %.5f, best nIoU: %.5f' % (trainer.best_iou, trainer.best_nIoU))
-
-
+    print('Best IoU: %.5f, best nIoU: %.5f, best FA: %f, best PD: %.5f' % (
+    trainer.best_iou, trainer.best_nIoU, trainer.best_FA, trainer.best_PD))

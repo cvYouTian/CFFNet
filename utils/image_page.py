@@ -22,13 +22,14 @@ class ImagePage(object):
     def __init__(self, experiment_name, html_filename):
         self.experiment_name = experiment_name
         self.html_filename = html_filename
-        self.outfile = open(self.html_filename, 'w')
+        self.outfile = open(self.html_filename, 'w', encoding="utf-8")
         self.items = []
 
     def _print_header(self):
         header = '''<!DOCTYPE html>
 <html>
   <head>
+    <meta charset="UTF-8">
     <title>Experiment = {}</title>
   </head>
   <body>'''.format(self.experiment_name)
