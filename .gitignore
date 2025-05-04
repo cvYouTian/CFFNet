@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 data/dataset/
+!data/dataset/IRSTD-1k/result.py
+!data/dataset/IRSTD-1k/images/
+!data/dataset/IRSTD-1k/masks/
+
 model/result/
 data/__pycache__/
 .idea/
