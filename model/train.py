@@ -29,8 +29,6 @@ def parse_args():
                         help='number of epochs, depends on your lr schedule 500 or 1000+ is available!')
     parser.add_argument('--warm-up-epochs', type=int, default=0, help='warm up epochs')
     parser.add_argument('--learning_rate', type=float, default=0.04, help='learning rate')
-    parser.add_argument('--backbone-mode', type=str, default='detlnet_1k',
-                        help='backbone mode: detlnet_sir, detlnet_1k')
     parser.add_argument('--fuse-mode', type=str, default='AsymBi',
                         help='fuse mode: BiLocal, AsymBi, BiGlobal')
     parser.add_argument('--device', type=str, default="cuda", help='if use gpu')
@@ -56,12 +54,7 @@ class Trainer(object):
 
         layer_blocks = [args.blocks_per_layer] * 3
         channels = [8, 16, 32, 64]
-        if args.backbone_mode == 'detlnet_sir':
-            self.net = cffnet(layer_blocks, channels)
-        elif args.backbone_mode == 'detlnet_1k':
-            self.net = cffnet(layer_blocks, channels)
-        else:
-            NameError
+        self.net = cffnet(layer_blocks, channels)
         # device = torch.device("cuda")
 
         self.device = args.device
