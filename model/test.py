@@ -66,7 +66,7 @@ class Dataset(Data.Dataset):
 
         img = Image.open(img_path).convert('RGB')
         mask = Image.open(label_path)
-
+        # 通过计算iamge和label得到gt——edge
         img, mask = self._testval_sync_transform(img, mask)
         edgemap = mask
 
@@ -157,7 +157,7 @@ class Get_gradientmask_nopadding(nn.Module):
         return x0
 
 
-# load
+# 直接使用pkl格式文件加载模型
 # def load_model():
 #     """加载训练好的模型"""
 #     model = torch.load(
@@ -212,7 +212,10 @@ def tensor_to_plt(tensor):
 
 
 def save_iamge(output, name, args):
-    output_dir = args.output_dir
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+
     tensor = output
     if tensor.dim() == 4:
         tensor = output.squeeze(0)  # 去除batch维度 [B,C,H,W] -> [C,H,W]
@@ -228,11 +231,11 @@ def save_iamge(output, name, args):
         img = (img - img.min()) / (img.max() - img.min())  # 归一化到[0,1]
     elif img.dtype == torch.uint8:
         img = img.astype(np.uint8)  # 保持0-255范围
+    path = f"{output_dir}/{name}.png"
+    print(f"save to {path} \n")
 
     # 单独保存预测mask
-    Image.fromarray((img.squeeze() * 255).astype(np.uint8)).save(
-        f"{output_dir}/{name}.png"
-    )
+    Image.fromarray((img.squeeze() * 255).astype(np.uint8)).save(path)
 
 
 def plot_comp(data, output, label=None):
@@ -270,8 +273,6 @@ def plot_comp(data, output, label=None):
 
 
 if __name__ == '__main__':
-
-
     grad = Get_gradient_nopadding()
     gradmask = Get_gradientmask_nopadding()
     args = parse_args()
@@ -284,7 +285,7 @@ if __name__ == '__main__':
 
     # 测试一系列图片
     if folders_test:
-        # 构建指标初始化信息
+        print("初始化指标...")
         iou_metric = SigmoidMetric()
         nIoU_metric = SamplewiseSigmoidMetric(1, score_thresh=0.5)
         # 初始化
@@ -301,7 +302,7 @@ if __name__ == '__main__':
         mIoU.reset()
         nIoU_metric.reset()
         PD_FA.reset()
-
+        print("开始测试...")
         for origin_data, labels, first_edge, name in valset:
             origin_data = origin_data.unsqueeze(0)
             first_edge = first_edge.unsqueeze(0)
@@ -312,7 +313,7 @@ if __name__ == '__main__':
 
             output, third_edge_out = net(origin_data.cuda(), edge_in.cuda())
             # 将测试结果保存在文件夹下
-            # save_iamge(output, name, args)
+            save_iamge(second_edge_gt, name, args)
 
             # 打印指标
             output = output.cpu()
@@ -331,6 +332,8 @@ if __name__ == '__main__':
             _, IoU = iou_metric.get()
             _, nIoU = nIoU_metric.get()
 
+        print("测试结束")
+        print("指标如下:")
         if IoU > best_iou:
             best_iou = IoU
         if nIoU > best_nIoU:
@@ -341,7 +344,7 @@ if __name__ == '__main__':
         if PD[0] > best_PD:
             best_PD = PD[0]
 
-        print(best_iou, best_nIoU, best_FA, best_PD)
+        print("IOU:", best_iou, "\n", "nIOU:", best_nIoU, "\n", "FA:", best_FA, "\n", "PD", best_PD)
 
 
     # 测试单帧图片，输入的压验证集图片的索引
