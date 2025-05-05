@@ -281,7 +281,6 @@ def fast_hist(label_pred, label_true, num_classes):
     return hist
 
 
-
 def print_evaluate_results(hist, iu, writer=None, epoch=0, dataset=None):
     try:
         id2cat = dataset.id2cat

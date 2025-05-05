@@ -1,5 +1,3 @@
-import os
-
 import torch
 from tqdm import tqdm
 import numpy as np
@@ -8,20 +6,13 @@ import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 import torch.nn as nn
 import torch.nn.functional as F
-from PIL import Image
 from cffnet import cffnet
 import os.path as osp
-import random
-
-import cv2
 import torchvision.transforms as transforms
 from PIL import Image, ImageOps, ImageFilter
-from albumentations import (
-    RandomRotate90, Transpose, ShiftScaleRotate, OpticalDistortion, CLAHE, GaussNoise, GridDistortion,
-    HueSaturationValue, ToGray,
-    PiecewiseAffine, Sharpen, Emboss, RandomBrightnessContrast, Flip, OneOf, Compose
-)
-
+from metrics import SigmoidMetric, SamplewiseSigmoidMetric
+from pathlib import Path
+from metric import PD_FA, ROCMetric, mIoU
 
 
 def parse_args():
@@ -69,9 +60,9 @@ class Dataset(Data.Dataset):
     def __getitem__(self, i):
         name = self.names[i]
         # 图片
-        img_path = osp.join(self.imgs_dir, name+'.png')
+        img_path = osp.join(self.imgs_dir, name + '.png')
         # 标注
-        label_path = osp.join(self.label_dir, name+'.png')
+        label_path = osp.join(self.label_dir, name + '.png')
 
         img = Image.open(img_path).convert('RGB')
         mask = Image.open(label_path)
@@ -92,6 +83,7 @@ class Dataset(Data.Dataset):
         mask = mask.resize((base_size, base_size), Image.NEAREST)
 
         return img, mask
+
 
 class Get_gradient_nopadding(nn.Module):
     def __init__(self):
@@ -165,7 +157,6 @@ class Get_gradientmask_nopadding(nn.Module):
         return x0
 
 
-
 # load
 # def load_model():
 #     """加载训练好的模型"""
@@ -176,11 +167,12 @@ class Get_gradientmask_nopadding(nn.Module):
 #
 #     return model.eval().cuda()
 #
+
 def load_model(args):
     # 1. 加载模型实例
     model = torch.load(
-            args.weight_path,
-            map_location='cpu')
+        args.weight_path,
+        map_location='cpu')
 
     # 2. 提取state_dict
     state_dict = model.state_dict()
@@ -242,6 +234,7 @@ def save_iamge(output, name, args):
         f"{output_dir}/{name}.png"
     )
 
+
 def plot_comp(data, output, label=None):
     # 可视化保存
     plt.figure(figsize=(15, 5))
@@ -277,26 +270,78 @@ def plot_comp(data, output, label=None):
 
 
 if __name__ == '__main__':
+
+
     grad = Get_gradient_nopadding()
     gradmask = Get_gradientmask_nopadding()
     args = parse_args()
     valset = Dataset(args)
+    # 对测试集进行测试
     folders_test = True
 
     net = load_model(args)
     net.eval()
+
     # 测试一系列图片
     if folders_test:
-        for origin_data, labels, first_edge, name in valset:
+        # 构建指标初始化信息
+        iou_metric = SigmoidMetric()
+        nIoU_metric = SamplewiseSigmoidMetric(1, score_thresh=0.5)
+        # 初始化
+        best_iou = 0
+        best_nIoU = 0
+        best_FA = 1000000000000000
+        best_PD = 0
+        # ROC 曲线的评估
+        ROC = ROCMetric(1, 10)
+        PD_FA = PD_FA(1, 10)
+        mIoU = mIoU(1)
 
+        iou_metric.reset()
+        mIoU.reset()
+        nIoU_metric.reset()
+        PD_FA.reset()
+
+        for origin_data, labels, first_edge, name in valset:
             origin_data = origin_data.unsqueeze(0)
             first_edge = first_edge.unsqueeze(0)
+            labels = labels.unsqueeze(0)
 
             edge_in = grad(origin_data.cuda())
             second_edge_gt = gradmask(first_edge.cuda())
 
             output, third_edge_out = net(origin_data.cuda(), edge_in.cuda())
-            save_iamge(output, name, args)
+            # 将测试结果保存在文件夹下
+            # save_iamge(output, name, args)
+
+            # 打印指标
+            output = output.cpu()
+            labels = labels.cpu()
+
+            iou_metric.update(output, labels)
+            nIoU_metric.update(output, labels)
+            ROC.update(output, labels)
+            mIoU.update(output, labels)
+            PD_FA.update(output, labels)
+
+            FA, PD = PD_FA.get(len(valset))
+            # print()
+
+            _, mean_IOU = mIoU.get()
+            _, IoU = iou_metric.get()
+            _, nIoU = nIoU_metric.get()
+
+        if IoU > best_iou:
+            best_iou = IoU
+        if nIoU > best_nIoU:
+            best_nIoU = nIoU
+            # FA_PD
+        if FA[0] * 1000000 > 0 and FA[0] * 1000000 < best_FA:
+            best_FA = FA[0] * 1000000
+        if PD[0] > best_PD:
+            best_PD = PD[0]
+
+        print(best_iou, best_nIoU, best_FA, best_PD)
 
 
     # 测试单帧图片，输入的压验证集图片的索引

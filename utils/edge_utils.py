@@ -2,11 +2,9 @@
 Copyright (C) 2019 NVIDIA Corporation.  All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
-
-import os
 import numpy as np
-from PIL import Image
 from scipy.ndimage.morphology import distance_transform_edt
+
 
 def mask_to_onehot(mask, num_classes):
     """
@@ -17,6 +15,7 @@ def mask_to_onehot(mask, num_classes):
     _mask = [mask == (i + 1) for i in range(num_classes)]
     return np.array(_mask).astype(np.uint8)
 
+
 def onehot_to_mask(mask):
     """
     Converts a mask (K,H,W) to (H,W)
@@ -24,6 +23,7 @@ def onehot_to_mask(mask):
     _mask = np.argmax(mask, axis=0)
     _mask[_mask != 0] += 1
     return _mask
+
 
 def onehot_to_multiclass_edges(mask, radius, num_classes):
     """
@@ -45,6 +45,7 @@ def onehot_to_multiclass_edges(mask, radius, num_classes):
         channels.append(dist)
         
     return np.array(channels)
+
 
 def onehot_to_binary_edges(mask, radius, num_classes):
     """

@@ -86,14 +86,14 @@ class Trainer(object):
         self.mIoU = mIoU(1)
 
         # folders
-        folder_name = '%s_%s_%s' % (time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time())),
-                                    args.backbone_mode, args.fuse_mode)
+        folder_name = '%s_%s' % (time.strftime('%Y-%m-%d-%H-%M-%S',
+                                               time.localtime(time.time())), args.fuse_mode)
         self.save_folder = ops.join('result/', folder_name)
 
         self.save_pkl = ops.join(self.save_folder, 'checkpoint')
         if not ops.exists('result'):
             os.mkdir('result')
-        if not ops.exists(self.save_folder):
+        if not ops.exists(self.save_folder):\
             os.mkdir(self.save_folder)
         if not ops.exists(self.save_pkl):
             os.mkdir(self.save_pkl)
@@ -105,7 +105,6 @@ class Trainer(object):
         # Print info
         print('folder: %s' % self.save_folder)
         print('Args: %s' % args)
-        print('backbone: %s' % args.backbone_mode)
         print('fuse mode: %s' % args.fuse_mode)
         print('layer block number:', layer_blocks)
         print('channels', channels)
@@ -130,6 +129,7 @@ class Trainer(object):
                 labels = labels[:, 0:1, :, :].cpu()
                 edge_in = self.grad(data.cpu())
                 edge_gt = self.gradmask(edge.cpu())
+
             # 这部分使用的强制转化，训练精度有待提升
             labels = torch.clamp(labels, 0.0, 1.0)
             edge_gt = torch.clamp(edge_gt, 0.0, 1.0)
@@ -209,7 +209,7 @@ class Trainer(object):
 
             tbar.set_description('  Epoch:%3d, eval loss:%f, eval_edge:%f, IoU:%f, nIoU:%f, mIoU:%f, FA:%f, PD:%f'
                                  % (
-                                 epoch, np.mean(eval_losses), np.mean(eval_losses_edge), IoU, nIoU, mean_IOU, FA, PD))
+                                 epoch, np.mean(eval_losses), np.mean(eval_losses_edge), IoU, nIoU, mean_IOU, FA[0], PD[0]))
         # 权重命名
         pkl_name = 'Epoch-%3d_IoU-%.4f_nIoU-%.4f.pkl' % (epoch, IoU, nIoU)
 
@@ -219,6 +219,7 @@ class Trainer(object):
         if nIoU > self.best_nIoU:
             torch.save(self.net, ops.join(self.save_pkl, pkl_name))
             self.best_nIoU = nIoU
+        # FA_PD
         if FA[0] * 1000000 > 0 and FA[0] * 1000000 < self.best_FA:
             self.best_FA = FA[0] * 1000000
         if PD[0] > self.best_PD:
@@ -281,10 +282,10 @@ class Get_gradient_nopadding(nn.Module):
             self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False).cpu()
 
     def forward(self, x):
-        x0 = x[:, 0:1]
+        x0 = x[:, 0]
 
-        x1 = x[:, 1:2]
-        x2 = x[:, 2:3]
+        x1 = x[:, 1]
+        x2 = x[:, 2]
 
         x0_v = F.conv2d(x0.unsqueeze(1), self.weight_v, padding=1)
         x0_h = F.conv2d(x0.unsqueeze(1), self.weight_h, padding=1)
@@ -325,7 +326,7 @@ class Get_gradientmask_nopadding(nn.Module):
             self.weight_v = nn.Parameter(data=kernel_v, requires_grad=False).cpu()
 
     def forward(self, x):
-        x0 = x[:, 0:1]
+        x0 = x[:, 0]
         x0_v = F.conv2d(x0.unsqueeze(1), self.weight_v, padding=1)
         x0_h = F.conv2d(x0.unsqueeze(1), self.weight_h, padding=1)
         x0 = torch.sqrt(torch.pow(x0_v, 2) + torch.pow(x0_h, 2) + 1e-6)
@@ -337,7 +338,7 @@ if __name__ == '__main__':
     args = parse_args()
     trainer = Trainer(args)
     for epoch in range(1, args.epochs + 1):
-        # trainer.training(epoch)
+        trainer.training(epoch)
         trainer.validation(epoch)
 
     print('Best IoU: %.5f, best nIoU: %.5f, best FA: %f, best PD: %.5f' % (
